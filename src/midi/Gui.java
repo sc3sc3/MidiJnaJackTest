@@ -35,7 +35,7 @@ public class Gui extends JFrame {
 				jackClient.processMidiMessage(msg);
 
 				try {
-					// play not for half a second
+					// play note for half a second
 					Thread.sleep(500);
 				} catch (InterruptedException e) {
 					e.printStackTrace();
