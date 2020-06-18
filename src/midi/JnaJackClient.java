@@ -1,6 +1,7 @@
 package midi;
 
 import java.util.EnumSet;
+import java.util.concurrent.ConcurrentLinkedQueue;
 
 import javax.sound.midi.ShortMessage;
 
@@ -19,15 +20,19 @@ public class JnaJackClient implements JackProcessCallback {
 	private Jack jack;
 	private JackClient jackClient;
 	private JackPort outputPort;
+	private ConcurrentLinkedQueue<ShortMessage> messageQueue;
 
 	public JnaJackClient() {
+		messageQueue = new ConcurrentLinkedQueue<>();
 		try {
 			EnumSet<JackOptions> options = EnumSet.of(JackOptions.JackNoStartServer);
 			EnumSet<JackStatus> status = EnumSet.noneOf(JackStatus.class);
 			this.jack = Jack.getInstance();
 			this.jackClient = this.jack.openClient("TestJackMidi", options, status);
-			EnumSet<JackPortFlags> flags = EnumSet.of(JackPortFlags.JackPortIsOutput);
-			this.outputPort = this.jackClient.registerPort("MIDI_out", JackPortType.MIDI, flags);
+
+			EnumSet<JackPortFlags> outputFlags = EnumSet.of(JackPortFlags.JackPortIsOutput);
+			this.outputPort = this.jackClient.registerPort("MIDI_out", JackPortType.MIDI, outputFlags);
+
 			this.jackClient.setProcessCallback(this);
 			this.jackClient.activate();
 		} catch (JackException e) {
@@ -37,21 +42,24 @@ public class JnaJackClient implements JackProcessCallback {
 
 	@Override
 	public boolean process(JackClient client, int frame) {
-		System.out.println("process frame: " + frame);
-		return true;
-	}
-
-	public void processMidiMessage(ShortMessage shortMessage) {
-		System.out.println("processMidiMessage: " + shortMessage + ", on port: " + this.outputPort.getName());
 		try {
 			JackMidi.clearBuffer(this.outputPort);
 		} catch (JackException e) {
 			e.printStackTrace();
 		}
-		try {
-			JackMidi.eventWrite(this.outputPort, 300, shortMessage.getMessage(), shortMessage.getLength());
-		} catch (JackException e) {
-			e.printStackTrace();
+		while (messageQueue.size() > 0) {
+			ShortMessage msg = messageQueue.remove();
+			try {
+				JackMidi.eventWrite(this.outputPort, 0, msg.getMessage(), msg.getLength());
+			} catch (JackException e) {
+				e.printStackTrace();
+				continue;
+			}
 		}
+		return true;
+	}
+
+	public void processMidiMessage(ShortMessage shortMessage) {
+		messageQueue.add(shortMessage);
 	}
 }
